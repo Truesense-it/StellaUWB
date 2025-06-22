@@ -20,21 +20,17 @@ public:
 		rangingParams.noOfControlees(1);
 		rangingParams.deviceMacAddr(srcAddr);
 		rangingParams.destinationMacAddr(dstAddr);
+		rangingParams.rangingRoundUsage(uwb::RangingMethod::DS_TWR);
 
-		appParams.rangingRoundUsage((uint8_t)uwb::RangingMode::DS_TWR);
 
 		appParams.frameConfig(uwb::RfFrameConfig::SP3);
-
 		appParams.slotPerRR(25);
-		
 		appParams.rangingDuration(200);
-		
-		appParams.powerId(20);
 		appParams.maxRetries(0);
 		appParams.sfdId(2);
 		appParams.preambleCodeIndex(10);
-
-
+		appParams.stsConfig(uwb::StsConfig::StaticSts);
+    	appParams.stsSegments(1);
 	}      		
 };
 

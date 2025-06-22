@@ -70,7 +70,7 @@ enum DeviceType : uint8_t {
 };
 
 // Ranging modes
-enum class RangingMode : uint8_t {
+enum class RangingMethod : uint8_t {
     TDOA = 0,
     SS_TWR = 1,
     DS_TWR = 2,
@@ -80,7 +80,7 @@ enum class RangingMode : uint8_t {
     OWR_AOA = 6
 };
 
-enum class RangingMethod : uint8_t {
+enum class RangingMode : uint8_t {
     SS_TWR = 0,              // Single-Sided Two Way Ranging
     DS_TWR = 1,              // Double-Sided Two Way Ranging
     SS_TWR_NO_DEFER = 2,     // Single-Sided TWR without defer
@@ -609,7 +609,7 @@ struct SessionConfig {
     SessionType type;
     DeviceRole role;
     DeviceType dev_type;
-    RangingMode ranging_mode;
+    RangingMethod ranging_mode;
     MacAddress device_mac;
     uint16_t slots_per_round;
     uint32_t ranging_interval_ms;
@@ -1145,7 +1145,7 @@ union DeviceConfigValue {
         uint8_t data_rate;              // Data rate configuration
     } channel;                         // For CHANNEL_CONFIG
     struct {
-        RangingMode default_mode;        // Default ranging mode
+        RangingMethod default_mode;        // Default ranging mode
         uint32_t default_interval_ms;    // Default ranging interval
     } ranging;                         // For RANGING_CONFIG
     struct {
