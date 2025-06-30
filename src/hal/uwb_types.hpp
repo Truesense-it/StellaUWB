@@ -107,8 +107,8 @@ enum HusSecurityMode : uint8_t {
 enum MultiNodeMode : uint8_t {
     UNICAST = 0x00,          // One-to-one communication
     MULTICAST = 0x01,        // One-to-many communication
-    ONE_TO_MANY = 0x02,      // One controller to multiple controlees
-    MANY_TO_MANY = 0x03      // Multiple controllers and controlees
+    ONE_TO_MANY = 0x01,      // One controller to multiple controlees
+    MANY_TO_MANY = 0x02      // Multiple controllers and controlees
 };
 
 enum  ScheduledMode : uint8_t {

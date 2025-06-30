@@ -85,7 +85,7 @@ bool UWBAppParamList::frameConfig(uint8_t config)
 
 bool UWBAppParamList::rangingRoundUsage(uint8_t rru)
 {
-     return addOrUpdateParam(buildScalar(uwb::AppConfigId::RangingRoundControl, rru));
+     return addOrUpdateParam(buildScalar(uwb::AppConfigId::RngMode, rru));
 }
 
 bool UWBAppParamList::maxRetries(uint16_t retries)
