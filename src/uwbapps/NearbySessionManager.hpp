@@ -61,7 +61,7 @@ public:
      * 
      * @param deviceName BLE device name
      */
-    void begin(String deviceName);
+    void begin(const char* deviceName);
 
     /**
      * @brief poll the BLE stack

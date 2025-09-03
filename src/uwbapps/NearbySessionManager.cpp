@@ -256,7 +256,7 @@ void NearbySessionManager::handleTLV(BLEDevice bleDev, uint8_t *data)
 
 
 }
-void NearbySessionManager::begin(String deviceName)
+void NearbySessionManager::begin(const char* deviceName)
 {
 
     BLEService nearbyServ("48FE3E40-0817-4BB2-8633-3073689C2DBA"); // create service
@@ -284,8 +284,8 @@ void NearbySessionManager::begin(String deviceName)
     BLE.setEventHandler(BLEDisconnected, blePeripheralDisconnectHandler);
     rxCharacteristic.setEventHandler(BLEWritten, rxCharacteristicWritten);
     // set the local name peripheral advertises
-    BLE.setLocalName(deviceName.c_str());
-    BLE.setDeviceName(deviceName.c_str());
+    BLE.setLocalName(deviceName);
+    BLE.setDeviceName(deviceName);
 }
 
 void NearbySessionManager::poll(void)
