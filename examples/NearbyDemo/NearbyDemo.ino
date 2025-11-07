@@ -127,7 +127,7 @@ void setup() {
   UWBNearbySessionManager.onSessionStop(sessionStopped);
 
   //init the BLE services and characteristic, advertise with TS_DCU040 as the device name
-  UWBNearbySessionManager.begin( "TS_DCU040");
+  UWBNearbySessionManager.begin("TS_DCU040");
   
 
 }
