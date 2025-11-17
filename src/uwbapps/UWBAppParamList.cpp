@@ -128,3 +128,7 @@ bool UWBAppParamList::powerId(uint8_t id)
      return addOrUpdateParam(buildScalar(uwb::AppConfigId::TxPowerId, id));
 }
 
+bool UWBAppParamList::destinationMacAddr(UWBMacAddressList addrs)
+{
+    return addOrUpdateParam(buildArray(uwb::AppConfigId::PeerAddress, addrs.getAllData(), addrs.size() * (uint8_t)addrs.macTypeSize()));
+}
