@@ -3,6 +3,7 @@
 
 #include "UWBAppParamsList.hpp"
 #include "UWBMacAddress.hpp"
+#include "UWBMacAddressList.hpp"
 
 
 #ifndef __UWBAPPPARAMLIST_HPP__
@@ -392,7 +393,15 @@ public:
      */
     bool destinationMacAddr(UWBMacAddress &addr);
 
-     // WHAT BELOW NEEDS SOME CLARIFICATION
+     /**
+     * @brief Set the Destination Mac Addresses for multicast session
+     *
+     * @param addrs List of destination MAC addresses
+     */
+    bool destinationMacAddr(UWBMacAddressList addrs); 
+     
+
+    // WHAT BELOW NEEDS SOME CLARIFICATION
      //        /**
      //       * @brief Set the Schedule Mode
      //       *
