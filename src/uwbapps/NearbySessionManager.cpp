@@ -1,22 +1,55 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 Truesense Srl
 
+#include "Arduino.h"
 #include "UWBAppParamList.hpp"
 #include "NearbySessionManager.hpp"
+#include "NearbyBlePeerNotify.hpp"
+#include "UWB.hpp"
 
-NearbySessionManager::NearbySessionManager() {
+NearbySessionManager::NearbySessionManager() : bleInitialized(false), txValueHandle(0) {
+   numSessions = 0;
    // SEMAPHORE_CREATE();
+}
+
+// Route TX notify to the requesting peer when multiple phones are connected.
+bool NearbySessionManager::notifyTx(BLEDevice peer, const uint8_t *data, int length)
+{
+    if (txValueHandle == 0) {
+        txValueHandle = nearbyBleValueHandle(txCharacteristic);
+    }
+
+    if (numSessions > 1) {
+        return nearbyBleNotifyPeer(peer, txValueHandle, data, length);
+    }
+    return txCharacteristic.writeValue(data, length) > 0;
+}
+
+void NearbySessionManager::restartAdvertising()
+{
+    // Match NXP SDK ble_server.c: BleApp_Start() after connect/disconnect
+    BLE.advertise();
 }
 
 void NearbySessionManager::blePeripheralConnectHandler(BLEDevice central)
 {
     // central connected event handler
 
-    NearbySession newSession(central);
-    NearbySessionManager::instance().addSession(newSession);
-    if (NearbySessionManager::instance().clientConnectionHandler)
+    NearbySessionManager &mgr = NearbySessionManager::instance();
 
-        NearbySessionManager::instance().clientConnectionHandler(central);
+    NearbySession newSession(central);
+    if (!mgr.addSession(newSession)) {
+        UWBHAL.Log_W("addSession failed (duplicate or max sessions)");
+        return;
+    }
+
+    if (mgr.clientConnectionHandler)
+        mgr.clientConnectionHandler(central);
+
+    // Restart advertising so additional phones can connect
+    if (mgr.numSessions < maxSessions) {
+        mgr.restartAdvertising();
+    }
 }
 
 void NearbySessionManager::onConnect(BLEDeviceEventHandler connectHandler)
@@ -43,16 +76,20 @@ void NearbySessionManager::blePeripheralDisconnectHandler(BLEDevice central)
 {
     // central disconnected event handler
 
-    //NearbySessionManager::instance().handleStopSession(central);
-    
-   
+    NearbySessionManager &mgr = NearbySessionManager::instance();
+    NearbySession &sess = mgr.find(central);
 
-    
-    if (NearbySessionManager::instance().clientDisconnectionHandler)
-        NearbySessionManager::instance().clientDisconnectionHandler(central);
-    
-    NearbySessionManager::instance().deleteSession(NearbySessionManager::instance().find(central).sessionID());
+    if (sess.sessionState() != notCreated) {
+        mgr.handleStopSession(central);
+    }
 
+    mgr.deleteSessionByDevice(central);
+
+    // Always restart advertising when a connection slot is freed (SDK BleApp_Start)
+    mgr.restartAdvertising();
+
+    if (mgr.clientDisconnectionHandler)
+        mgr.clientDisconnectionHandler(central);
 }
 
 void NearbySessionManager::rxCharacteristicWritten(BLEDevice central, BLECharacteristic characteristic)
@@ -66,8 +103,7 @@ bool NearbySessionManager::handleStopSession(BLEDevice bleDev)
     bool status = true;
     uwb::Status operation = uwb::Status::SUCCESS;
     NearbySession &nearbySession = NearbySessionManager::instance().find(bleDev);
-   // SEMAPHORE_TAKE();
-    delay(2000);
+    // SEMAPHORE_TAKE();
     while (nearbySession.sessionState() != notCreated)
     {
         switch (nearbySession.sessionState())
@@ -103,14 +139,14 @@ bool NearbySessionManager::handleStopSession(BLEDevice bleDev)
                 status = false;
             }
             break;
-            
+
         default:
             UWBHAL.Log_E("Stop session wrong state: %d", nearbySession.sessionState());
             status = false;
             break;
         }
     }
-   // SEMAPHORE_GIVE();
+    // SEMAPHORE_GIVE();
     if (sessionStoppedHandler != nullptr)
         sessionStoppedHandler(bleDev);
     return status;
@@ -134,21 +170,23 @@ void NearbySessionManager::handleTLV(BLEDevice bleDev, uint8_t *data)
     {
     case kMsg_ConfigureAndStart:
     {
+        if (nearbySession.sessionState() == Started) {
+            response = kRsp_UwbDidStart;
+            notifyTx(bleDev, &response, sizeof(response));
+            break;
+        }
+
         nearbySession.sessionState(notStarted);
         if (nearbySession.deviceType() == Android)
         {
             if (nearbySession.startAndroid(data) == uwb::Status::SUCCESS)
             {
                 response = kRsp_UwbDidStart;
-                txCharacteristic.writeValue(&response, sizeof(response));
+                notifyTx(bleDev, &response, sizeof(response));
             }
             else
             {
                 UWBHAL.Log_E("Could not start Android Nearby Session");
-            }
-            {
-                response = kRsp_UwbDidStart;
-                txCharacteristic.writeValue(&response, sizeof(response));
             }
         }
         else if (nearbySession.deviceType() == iOS)
@@ -159,8 +197,8 @@ void NearbySessionManager::handleTLV(BLEDevice bleDev, uint8_t *data)
             if (nearbySession.startIOS(data) == uwb::Status::SUCCESS)
             {
                 response = kRsp_UwbDidStart;
-                txCharacteristic.writeValue(&response, sizeof(response));
-                if (nearbySession.shouldUpdateAccessory())
+                notifyTx(bleDev, &response, sizeof(response));
+                if (nearbySession.shouldUpdateAccessory() && numSessions <= 1)
                 {
                     const uint8_t tmpData[50] = {0};
                     accessoryConfigDataChar.writeValue(tmpData, 50);//neds to be fixed
@@ -185,7 +223,8 @@ void NearbySessionManager::handleTLV(BLEDevice bleDev, uint8_t *data)
          * Fill the ConfigData and send it over BLE to the phone application
          */
 
-        if (nearbySession.configIOS() == uwb::Status::SUCCESS)
+        uint8_t cfgStatus = nearbySession.configIOS();
+        if (cfgStatus == (uint8_t)uwb::Status::SUCCESS)
         {
             uint8_t *BLEmessage_iOS = nearbySession.config();
             for (int jj=0; jj < 1 + nearbySession.configLen(); jj++)
@@ -199,19 +238,22 @@ void NearbySessionManager::handleTLV(BLEDevice bleDev, uint8_t *data)
             {
                 UWBHAL.Log_I(" Following spec: 1.1");
                 /* Spec 1.1 required to update GATT server
-                Update the GATT server with the same BLEmessage (only removing Response ID that is not part of the original definition) */
+                 * Update the GATT server with the same BLEmessage (only removing Response ID that is not part of the original definition) */
                 accessoryConfigDataChar.writeValue(BLEmessage_iOS + 1, nearbySession.configLen() - 1);
 
                 /* Need to send the exact data over ble */
-                
-                txCharacteristic.writeValue(BLEmessage_iOS, nearbySession.configLen());
+                notifyTx(bleDev, BLEmessage_iOS, nearbySession.configLen());
             }
             else
             {
                 UWBHAL.Log_I(" Following spec 1.0");
-                /* Spec 1.0 support, clock drift not sent over BLE. BLE message size must  */
-                txCharacteristic.writeValue(BLEmessage_iOS, nearbySession.configLen());
+                /* Spec 1.0 support, clock drift not sent over BLE. BLE message size must */
+                notifyTx(bleDev, BLEmessage_iOS, nearbySession.configLen());
             }
+        }
+        else
+        {
+            UWBHAL.Log_E("configIOS failed during Initialize_iOS");
         }
     }
     break;
@@ -223,8 +265,8 @@ void NearbySessionManager::handleTLV(BLEDevice bleDev, uint8_t *data)
         {
             uint8_t *BLEmessage_Android = nearbySession.config();
 
-            /* Need to send the exact data from ConfigData  over ble */
-            txCharacteristic.writeValue(BLEmessage_Android, nearbySession.configLen());
+            /* Need to send the exact data from ConfigData over ble */
+            notifyTx(bleDev, BLEmessage_Android, nearbySession.configLen());
         }
         else
             UWBHAL.Log_E("Android config fail");
@@ -245,7 +287,7 @@ void NearbySessionManager::handleTLV(BLEDevice bleDev, uint8_t *data)
             uwb_status = uwb::Status::SUCCESS;
         }
         response = kRsp_UwbDidStop;
-        txCharacteristic.writeValue(&response, sizeof(response));
+        notifyTx(bleDev, &response, sizeof(response));
 
         break;
 
@@ -254,10 +296,11 @@ void NearbySessionManager::handleTLV(BLEDevice bleDev, uint8_t *data)
         break;
     }
 
-
 }
 void NearbySessionManager::begin(const char* deviceName)
 {
+    // Multi-session Nearby: keep UWB HAL alive across BLE connect/disconnect cycles
+    UWB.setKeepAlive(true);
 
     BLEService nearbyServ("48FE3E40-0817-4BB2-8633-3073689C2DBA"); // create service
     BLECharacteristic accessoryConfigData("95E8D9D5-D8EF-4721-9A4E-807375F53328", BLERead, 128);
@@ -272,7 +315,7 @@ void NearbySessionManager::begin(const char* deviceName)
 
     while (!BLE.begin())
         UWBHAL.Log_E("starting Bluetooth® Low Energy module failed!");
-    
+
     // set the UUID for the service this peripheral advertises
     BLE.setAdvertisedService(configService);
     configService.addCharacteristic(rxCharacteristic);
@@ -286,6 +329,7 @@ void NearbySessionManager::begin(const char* deviceName)
     // set the local name peripheral advertises
     BLE.setLocalName(deviceName);
     BLE.setDeviceName(deviceName);
+    txValueHandle = nearbyBleValueHandle(txCharacteristic);
 }
 
 void NearbySessionManager::poll(void)
@@ -299,7 +343,7 @@ void NearbySessionManager::poll(void)
 
 }
 
-NearbySession &NearbySessionManager::find(BLEDevice dev) 
+NearbySession &NearbySessionManager::find(BLEDevice dev)
 {
     NearbySession *tempSession;
     for (int i = 0; i < numSessions; i++)
@@ -317,16 +361,44 @@ NearbySession &NearbySessionManager::find(BLEDevice dev)
 
 bool NearbySessionManager::addSession(NearbySession &sess)
 {
+    if (numSessions >= maxSessions)
+        return false;
+
+    for (int i = 0; i < numSessions; i++) {
+        NearbySession *existing = (NearbySession *)sessions[i];
+        if (existing->bleAddress() == sess.bleAddress()) {
+            return false;
+        }
+    }
+
     NearbySession *newSess = new NearbySession();
     newSess->sessionID(sess.sessionID());
     newSess->sessionType(sess.sessionType());
     newSess->bleDevice(sess.bleDevice());
 
-    if (numSessions >= maxSessions)
-        return false;
-
     sessions[numSessions++] = newSess; //&sess;
     return true;
+}
+
+// Remove session by BLE address (session ID may be 0 before ConfigureAndStart).
+bool NearbySessionManager::deleteSessionByDevice(BLEDevice dev)
+{
+    String addr = dev.address();
+    for (int i = 0; i < numSessions; ++i)
+    {
+        NearbySession *s = (NearbySession *)sessions[i];
+        if (s->bleAddress() == addr)
+        {
+            delete s;
+            for (int j = i; j < numSessions - 1; ++j) {
+                sessions[j] = sessions[j + 1];
+            }
+            numSessions--;
+            sessions[numSessions] = nullptr;
+            return true;
+        }
+    }
+    return false;
 }
 
 NearbySessionManager &NearbySessionManager::instance()
@@ -337,4 +409,3 @@ NearbySessionManager &NearbySessionManager::instance()
 }
 
 NearbySessionManager &UWBNearbySessionManager = UWBNearbySessionManager.instance();
-

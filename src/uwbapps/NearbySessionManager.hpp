@@ -85,6 +85,11 @@ public:
      * @return false 
      */
     bool addSession(NearbySession &sess);
+
+    /**
+     * @brief Remove the session for a BLE peer (by address, not session ID).
+     */
+    bool deleteSessionByDevice(BLEDevice dev);
     
     /**
      * @brief Get the singleton object
@@ -131,8 +136,10 @@ private:
     static void rxCharacteristicWritten(BLEDevice central, BLECharacteristic characteristic);
 
     bool bleInitialized;
-private:
-    
+    uint16_t txValueHandle;
+
+    void restartAdvertising();
+    bool notifyTx(BLEDevice peer, const uint8_t *data, int length);
 };
 
 extern NearbySessionManager &UWBNearbySessionManager;
