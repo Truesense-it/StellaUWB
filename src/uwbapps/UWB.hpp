@@ -79,6 +79,13 @@ public:
      * 
      */
     void end(void);
+
+    /**
+     * @brief When true, end() skips HAL shutdown (required for multi-session Nearby).
+     */
+    void setKeepAlive(bool enable) { halKeepAlive = enable; }
+    bool isKeepAlive() const { return halKeepAlive; }
+
     /**
      * @brief init the UWB engine (automatically called by begin())
      * 
@@ -151,6 +158,7 @@ private:
     UWB_(UWB_ const &) = delete;
     void operator=(UWB_ const &) = delete;
     static Print* printer;
+    bool halKeepAlive = false;
 };
 
 extern UWB_ &UWB;

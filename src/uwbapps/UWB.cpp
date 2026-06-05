@@ -40,26 +40,37 @@ UWB_::UWB_()
 
 void UWB_::begin(Print& printInterface, uwb::LogLevel logLevel)
 {
-    //BaseType_t xReturned;
     printer=&printInterface;
     UWBHAL.setLogLevel(logLevel);
     UWBHAL.setPrintCallback(logCB);
-   
-    //int old = uxTaskPriorityGet(NULL);
-    //vTaskPrioritySet(NULL,1);
+
+    // Multi-session Nearby: skip full re-init when HAL is already running
+    if (halKeepAlive) {
+        uwb::DeviceState devState = uwb::DeviceState::NOT_INITIALIZED;
+        if (UWBHAL.getDeviceState(devState) == uwb::Status::SUCCESS &&
+            devState != uwb::DeviceState::NOT_INITIALIZED &&
+            devState != uwb::DeviceState::UNKNOWN) {
+            UWBHAL.Log_D("begin: HAL already up (keepAlive), skipping initialize");
+            return;
+        }
+    }
+
     initUWB();
-    //vTaskPrioritySet(NULL,old);
-	
-    
 }
+
 void UWB_::end(void)
 {
+    // Multi-session Nearby: avoid full HAL shutdown between BLE sessions
+    if (halKeepAlive) {
+        UWBHAL.Log_I("UWB.end() skipped (keepAlive mode)");
+        return;
+    }
+
     UWBHAL.deinitialize();
     delay(100); // Wait for the deinitialization to complete
     if (UWBHAL.shutdown() != uwb::Status::SUCCESS) {
         UWBHAL.Log_E("ShutDown Failed");
     }
-    
 }
 
 

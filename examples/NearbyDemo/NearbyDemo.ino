@@ -14,6 +14,11 @@
  * The BLE session is used to share the configuration parameters necessary to
  * setup the UWB ranging session
  * 
+ * Multi-session (DCU040): up to 5 phones may connect. Connect phone B while phone A
+ * is still connected to range with both simultaneously. NearbySessionManager handles
+ * per-peer BLE notify, session cleanup, and BLE re-advertising. Do not call UWB.end()
+ * on disconnect — the library keeps the HAL alive between sessions.
+ * 
  * Examples of UWB-enabled apps working with this demo:
  * 
  * NXP Trimensions AR (https://apps.apple.com/us/app/nxp-trimensions-ar/id1606143205) 
@@ -64,8 +69,9 @@ void rangingHandler(UWBRangingData &rangingData) {
  */
 void clientConnected(BLEDevice dev) {
   //init the UWB stack upon first connection
-  if (numConnected == 0)
-    UWB.begin();  //start the UWB engine, use Serial stream interface for logging
+  if (numConnected == 0) {
+    UWB.begin(Serial, uwb::LogLevel::UWB_INFO_LEVEL);  //start the UWB engine, use Serial stream interface for logging
+  }
   //increase the number of connected clients
   numConnected++;
 }
@@ -78,8 +84,9 @@ void clientConnected(BLEDevice dev) {
 void clientDisconnected(BLEDevice dev) {
   numConnected--;
   //deinit the UWB stack if no clients are connected
-  if(numConnected==0)
-    UWB.end();
+  // NOTE: do NOT call UWB.end() here. Per-session UWB cleanup is done in
+  // NearbySessionManager on disconnect. The library keeps the HAL alive
+  // (UWB.setKeepAlive) so the next connection does not require a full re-init.
 }
 
 /**
