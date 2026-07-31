@@ -1,13 +1,19 @@
 #include "StellaUWB.h"
 
 /**
- * TAG (Responder) participates in multicast
+ * Two-Way Ranging - Responder / Controlee in a multicast session
  *
- * This demo shows how to setup the Arduino Stella TAG as a
- * Two-Way Ranging RESPONDER/CONTROLEE that participates in a
- * multicast (one-to-many) session started by a Controller.
- * It expects a Controller (e.g. Portenta) configured as multicast
- * initiator, and this Stella TAG joins as one of the controlees.
+ * Sets up the Arduino Stella as a Responder/Controlee joining a multicast
+ * (one-to-many) session started by a Controller, and prints the measured
+ * distance.
+ *
+ * Hardware: 2 or more boards.
+ *   This board    : UWB_MulticastResponder (own MAC 0x2222, controller 0x1111)
+ *   Controller    : UWB_OneToMany on another Stella, or a Portenta configured
+ *                   as a multicast initiator
+ *
+ * To run several responders, give each board a unique devAddr (0x2222, 0x3333,
+ * 0x4444, 0x5555) matching the controller's destination list.
  */
 
 

@@ -6,6 +6,26 @@
 #include "UWBSession.hpp"
 #include "hal/uwb_types.hpp"
 
+// ---------------------------------------------------------------------------
+// StellaUWB build switches. Defined here because StellaUWB.h pulls in this
+// header, so the library translation units and the sketch all see one value.
+// ---------------------------------------------------------------------------
+
+// STELLA_KEEPALIVE - keep the UWB stack initialised across BLE connect and
+// disconnect (1) instead of re-initialising each time (0). Leave at 1 for
+// normal use; 0 is a diagnostic option.
+#ifndef STELLA_KEEPALIVE
+#define STELLA_KEEPALIVE 1
+#endif
+
+// STELLA_WATCHDOG - arm the mbed hardware watchdog in the sketch, so the board
+// resets if loop() stops responding. Recommended for unattended installations.
+// Set to 0 while debugging, so a reset does not discard the state you are
+// inspecting.
+#ifndef STELLA_WATCHDOG
+#define STELLA_WATCHDOG 1
+#endif
+
 /* Define for App developer */
 /* Specification number must be filled as mention in the developer specification */
 #define SPEC_VERSION_MAJOR \
@@ -57,7 +77,7 @@ typedef enum
  * @brief this class implements the device side of the Nearby Interaction with
  *  3rd Party Devices from Apple (see https://developer.apple.com/nearby-interaction/) 
  * the implementation also works with UWB-enabled Android devices by using different
- * commnd IDs
+ * command IDs
  * 
  */
 
@@ -94,6 +114,11 @@ public:
     {
         profileInfo.mac_addr[0] = macAddress().get(0);
         profileInfo.mac_addr[1] = macAddress().get(1);
+        // Set role and type explicitly, as startIOS() does. profile_info is
+        // documented as "Output profile info", so the HAL most likely overwrites
+        // them; this is defensive rather than proven necessary.
+        profileInfo.device_role = uwb::DeviceRole::INITIATOR;
+        profileInfo.device_type = uwb::DeviceType::CONTROLLER;
         //profileInfo.profile_id = 1;//uwb::ProfileId::Profile_1;
         //UWBHAL.Log_MAU8_I("mac addr :", profileInfo.mac_addr, 2);
         uwb::AndroidDeviceConfig andConfig;
@@ -105,31 +130,38 @@ public:
         
 
         uwb_status = UWBHAL.configureDevice_Android(andConfig);
+        UWBHAL.Log_I("[FIELD] configureDevice_Android status=%d handle=0x%08lX role=%d type=%d",
+                     (int)uwb_status, (unsigned long)andConfig.profile_info.session_handle,
+                     (int)andConfig.profile_info.device_role, (int)andConfig.profile_info.device_type);
         if (uwb_status != uwb::Status::SUCCESS) {
             UWBHAL.Log_E("Phone data not configured");
-            /* If the status if HPD wake up then try to do it one more time */
+            /* If the status is HPD wake up then try to do it one more time */
             if (uwb::Status::HPDWKUP == uwb_status) {
                 UWBHAL.Log_W("Device woke up from HPD");
                 UWBHAL.setDefaultCoreConfigs();
                 uwb_status = UWBHAL.configureDevice_Android(andConfig);
-                if (uwb_status != uwb::Status::SUCCESS) {
-                    UWBHAL.Log_E("Shareable data not configured");
-                    return uwb_status;
-                }
-            } else
-            {
-                UWBHAL.Log_E("Shareable data not configured");
-                return uwb_status;
+                UWBHAL.Log_I("[FIELD] configureDevice_Android(retry) status=%d handle=0x%08lX role=%d type=%d",
+                             (int)uwb_status, (unsigned long)andConfig.profile_info.session_handle,
+                             (int)andConfig.profile_info.device_role, (int)andConfig.profile_info.device_type);
             }
-        } else
-        {
-            UWBHAL.Log_I("Phone data configured");
-            //sessionHandle(profileInfo.session_handle);
-            sessionID(profileInfo.session_handle);
-            sessionState(Started);
-            return uwb::Status::SUCCESS;
         }
-        return uwb::Status::FAILED;
+        // Single exit policy: any non-SUCCESS, including a failed HPD retry,
+        // returns here. The success block below is the only place that sets
+        // sessionID/sessionState, reached identically with or without a retry.
+        if (uwb_status != uwb::Status::SUCCESS) {
+            UWBHAL.Log_E("Shareable data not configured");
+            return uwb_status;
+        }
+
+        UWBHAL.Log_I("Phone data configured");
+        //sessionHandle(profileInfo.session_handle);
+        // The HAL writes the assigned handle into andConfig.profile_info
+        // (the "Output profile info" field), not the profileInfo member we
+        // copied in. Read it back from andConfig so Android sessions get a
+        // valid session ID for per-device ranging attribution.
+        sessionID(andConfig.profile_info.session_handle);
+        sessionState(Started);
+        return uwb::Status::SUCCESS;
     }
 
     uint8_t configIOS()
@@ -164,9 +196,13 @@ public:
                 uwb_status = UWBHAL.getUwbConfigData_iOS(uwb::DeviceRole::INITIATOR, UserConfigData_iOS.uwb_config_data);                
             }
         }
+        UWBHAL.Log_I("[FIELD] getUwbConfigData_iOS status=%d", (int)uwb_status);
         if (uwb_status != uwb::Status::SUCCESS)
         {
-            UWBHAL.Log_E("GetUwbConfigData configuration failed");
+            UWBHAL.Log_E("GetUwbConfigData configuration failed status=%d", (int)uwb_status);
+            // Propagate the failure rather than returning SUCCESS, which would
+            // let handleTLV transmit a config built from invalid data.
+            return uwb_status;
         }
         /* Build BLE Message, to be build depending on the iOS application message stream
          * In example application, it contains Message ID + Accessory configuration data */
@@ -223,36 +259,35 @@ public:
         //profileCfg.debug_configs = {};
         //UWBHAL.Log_MAU8_I("mac addr :", profileInfo.mac_addr, 2);
         uwb_status=UWBHAL.configureDevice_iOS(profileCfg);
+        UWBHAL.Log_I("[FIELD] configureDevice_iOS status=%d", (int)uwb_status);
         if (uwb_status != uwb::Status::SUCCESS)
         {
             UWBHAL.Log_E("Shareable data not configured");
-            /* If the status if HPD wake up then try to do it one more time */
+            /* If the status is HPD wake up then try to do it one more time */
             if (uwb::Status::HPDWKUP == uwb_status)
             {
                 UWBHAL.Log_W("Device woke up from HPD");
                 UWBHAL.setDefaultCoreConfigs();
                 //uwb_status = UWBHAL.configIOSData(data + 1, *(data + SHAREABLE_DATA_LENGTH_OFFSET) + SHAREABLE_DATA_HEADER_LENGTH, &profileInfo, 0, NULL, 0, NULL);
                 uwb_status=UWBHAL.configureDevice_iOS(profileCfg);
-                
-                if (uwb_status != uwb::Status::SUCCESS)
-                {
-                    UWBHAL.Log_E("Shareable data not configured");
-                    return uwb::Status::FAILED;
-                }
-            }
-            else
-            {
-                UWBHAL.Log_E("Shareable data not configured");
+                UWBHAL.Log_I("[FIELD] configureDevice_iOS(retry) status=%d", (int)uwb_status);
             }
         }
-        else
+        // Single exit policy: any non-SUCCESS, including a failed HPD retry,
+        // returns the real status here. The success block below is the only place
+        // that sets sessionID/sessionState, reached identically with or without
+        // a retry.
+        if (uwb_status != uwb::Status::SUCCESS)
         {
-            UWBHAL.Log_D("Shareable data configured");
-            UWBHAL.Log_D("session handle: %d", profileCfg.profile_info.session_handle);
-            //sessionHandle(profileCfg.profile_info.session_handle);
-            sessionID(profileCfg.profile_info.session_handle);
-            sessionState(Started);
+            UWBHAL.Log_E("Shareable data not configured");
+            return uwb_status;
         }
+
+        UWBHAL.Log_D("Shareable data configured");
+        UWBHAL.Log_D("session handle: %d", profileCfg.profile_info.session_handle);
+        //sessionHandle(profileCfg.profile_info.session_handle);
+        sessionID(profileCfg.profile_info.session_handle);
+        sessionState(Started);
         return uwb::Status::SUCCESS;
     }
 
@@ -304,7 +339,7 @@ private:
     SessionState sessState;
     UWBMacAddress macAddr;
     
-    struct uwb::ProfileInfo profileInfo;
+    struct uwb::ProfileInfo profileInfo = {}; // zero-initialised: the HAL fills this in
     //UwbDeviceConfigData_t uwb_data_content;
     struct uwb::iOSAccessoryConfigData  UserConfigData_iOS = {0};
     //UwbDeviceConfigData_t UwbDeviceConfigData = { 0 };

@@ -3,6 +3,7 @@
 
 #include "Arduino.h"
 #include "SPI.h"
+#include <string.h>
 #include "UWB.hpp"
 
 #include "UWBSessionManager.hpp"
@@ -16,7 +17,13 @@ extern "C" int runtime_log_level;
 
 extern "C" void logCB(const char *str)
 {
-   UWB_::printMessage(str);
+    if (str != nullptr) {
+        if (strstr(str, "Command error in SPI Write") != nullptr ||
+            strstr(str, "phTmlUwb_Write Failed") != nullptr) {
+            UWB_::scheduleSpiRecovery();
+        }
+    }
+    UWB_::printMessage(str);
 }
 
 extern "C" void SystemCallback(uwb::NotificationType opType, void *pData)
@@ -30,7 +37,9 @@ EARLY_AUTOSTART_FREERTOS
 #endif
 
 HandlerEntry NotificationDispatcher::handlers[MAX_HANDLERS] = {};
-Print* UWB_::printer = nullptr; 
+Print* UWB_::printer = nullptr;
+volatile bool UWB_::spiFaultPending = false;
+unsigned long UWB_::spiRecoveryAt = 0;
 
 
 UWB_::UWB_()
@@ -70,6 +79,39 @@ void UWB_::end(void)
     delay(100); // Wait for the deinitialization to complete
     if (UWBHAL.shutdown() != uwb::Status::SUCCESS) {
         UWBHAL.Log_E("ShutDown Failed");
+    }
+}
+
+void UWB_::scheduleSpiRecovery(void)
+{
+    if (!spiFaultPending) {
+        spiFaultPending = true;
+        spiRecoveryAt = millis() + 500;
+    }
+}
+
+bool UWB_::recoverFromSpiFault(void)
+{
+    UWBHAL.Log_W("UWB SPI fault recovery: resetting HAL");
+
+    uwb::Status resetStatus = UWBHAL.reset();
+    delay(200);
+
+    uwb::DeviceState devState = uwb::DeviceState::NOT_INITIALIZED;
+    if (UWBHAL.getDeviceState(devState) != uwb::Status::SUCCESS ||
+        devState == uwb::DeviceState::NOT_INITIALIZED ||
+        devState == uwb::DeviceState::UNKNOWN) {
+        initUWB();
+    }
+
+    return resetStatus == uwb::Status::SUCCESS;
+}
+
+void UWB_::pollRecovery(void)
+{
+    if (spiFaultPending && (long)(millis() - spiRecoveryAt) >= 0) {
+        spiFaultPending = false;
+        recoverFromSpiFault();
     }
 }
 

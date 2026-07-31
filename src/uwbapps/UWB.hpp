@@ -81,10 +81,21 @@ public:
     void end(void);
 
     /**
-     * @brief When true, end() skips HAL shutdown (required for multi-session Nearby).
+     * @brief When true, end() keeps the UWB stack initialised. Required for
+     * multi-session Nearby Interaction.
      */
     void setKeepAlive(bool enable) { halKeepAlive = enable; }
     bool isKeepAlive() const { return halKeepAlive; }
+
+    /**
+     * @brief Reset and re-initialise the UWB stack.
+     */
+    bool recoverFromSpiFault(void);
+
+    /**
+     * @brief Call from the main loop to run any scheduled stack reset.
+     */
+    void pollRecovery(void);
 
     /**
      * @brief init the UWB engine (automatically called by begin())
@@ -99,7 +110,7 @@ public:
     void deInitUWB(void);
        
     /**
-     * @brief Get the Sdevice state
+     * @brief Get the device state
      * 
      * @return #uwb::Status::SUCCESS               on success
      * @return #uwb::Status::INVALID_PARAM    if parameter is invalid
@@ -151,6 +162,7 @@ public:
 
 
     static void printMessage(const char* message);
+    static void scheduleSpiRecovery(void);
 
     static UWB_& getInstance();
 
@@ -159,6 +171,8 @@ private:
     void operator=(UWB_ const &) = delete;
     static Print* printer;
     bool halKeepAlive = false;
+    static volatile bool spiFaultPending;
+    static unsigned long spiRecoveryAt;
 };
 
 extern UWB_ &UWB;

@@ -1,23 +1,23 @@
 #include "StellaUWB.h"
 
 /**
- * Multi-Session Tag 1 Demo
- * 
- * This demo shows how to setup the Arduino Stella as Tag 1 that participates
- * in a multi-session ranging system. This tag connects to the anchor's 
- * Session 1 (0x111111).
- * 
- * Configuration must match the anchor's Session 1:
- * - Session ID: 0x111111
- * - Tag MAC: 0x2222
- * - Anchor MAC: 0x1111
- * - Preamble Code: 10
- * 
- * The anchor can simultaneously track this tag along with other tags on 
- * different sessions.
- * 
- * It expects a counterpart Portenta C33 setup as a Multi-Session Anchor
- * 
+ * Multi-Session Tag
+ *
+ * Sets up the Arduino Stella as a tag in a multi-session ranging system, so one
+ * anchor can track several tags at once, each on its own session.
+ *
+ * Hardware: 1 Stella board, plus a Portenta C33 configured as a Multi-Session
+ * Anchor. The anchor is required; this sketch does not range against another
+ * Stella running the same sketch.
+ *
+ * This tag's settings must match the anchor's Session 1:
+ *   Session ID   : 0x111111
+ *   Tag MAC      : 0x2222
+ *   Anchor MAC   : 0x1111
+ *   Preamble code: 10
+ *
+ * Each concurrent session must use a different preamble code, so give every
+ * additional tag its own session ID, MAC and preamble code.
  */
 
 // handler for ranging notifications
