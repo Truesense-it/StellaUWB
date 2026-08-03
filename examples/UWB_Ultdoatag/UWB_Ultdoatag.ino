@@ -1,6 +1,14 @@
 #include "StellaUWB.h"
 
 /**
+ * Uplink TDoA (UL-TDoA) Tag
+ *
+ * Hardware: 1 Stella board, plus a UL-TDoA anchor infrastructure of at least
+ * 4 Portenta C33 boards with the UWB Anchor shield, one configured as
+ * synchronization master and the rest as slaves. This sketch transmits only and
+ * produces no distance output on its own; positions are computed by the server
+ * that collects the anchor timestamps.
+ *
  * this demo shows how to setup the Arduino Stella as a uplink TDoA Tag
  * Uplink TDoA configuration is typically used for industrial and logistics use cases 
  * where a large number of tags shall be tracked, the bandwidth occupation rate 
@@ -46,19 +54,13 @@ void setup() {
     delay(10);
 
   Serial.println("Starting session ...");
-  //setup a TDOA Tag session with Id 0x11223344 with an default 2 seconds
+  //setup a TDOA Tag session with Id 0x11223344 with a default 2 seconds
   //transmission interval, source and destination addresses
   UWBUltdoaTag myTag(0x11223344,srcAddr,dstAddr);
-  //you can change the transmission interval by passing a different value in the
-  //constructor, e.g. 
-  //
-  //  UWBUltdoaTag myTag(0x11223344,srcAddr,dstAddr,1000);
-  //
-  //will configure the tag to send a Blink every 1 second
-  //One can achieve the same result by using the following code:
-  //
-  //myTag.appParams.tdoaTxInterval(1000); //set the transmission interval to 1 second
-  //
+  //To change the transmission interval, pass it to the constructor, e.g.
+  //  UWBUltdoaTag myTag(0x11223344, srcAddr, dstAddr, 1000);
+  //sends a Blink every 1 second. The equivalent using appParams is:
+  //  myTag.appParams.tdoaTxInterval(1000);
 
   //add to session manager, useful in case you want to manage multiple sessions
   UWBSessionManager.addSession(myTag);

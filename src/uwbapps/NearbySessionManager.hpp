@@ -9,6 +9,11 @@
 #include "UWBSessionManager.hpp"
 #include "NearbySession.hpp"
 
+// Forward declaration only: sessionMutex is a pointer, so an incomplete type
+// suffices. This keeps the mbed RTOS headers out of every sketch that includes
+// StellaUWB.h; the real <rtos/Mutex.h> is included in the .cpp.
+namespace rtos { class Mutex; }
+
 class NearbySessionManager : public UWBSessionManager_ {
 public:
     NearbySessionManager();
@@ -90,6 +95,11 @@ public:
      * @brief Remove the session for a BLE peer (by address, not session ID).
      */
     bool deleteSessionByDevice(BLEDevice dev);
+
+    /**
+     * @brief Find a Nearby session by UWB session handle (for ranging attribution).
+     */
+    NearbySession *findBySessionHandle(uint32_t sessionHandle);
     
     /**
      * @brief Get the singleton object
@@ -137,8 +147,37 @@ private:
 
     bool bleInitialized;
     uint16_t txValueHandle;
+    bool cleanupInProgress;
+    unsigned long advertisingResumeAt;
+
+    /**
+     * @brief Guards sessions[] and numSessions only.
+     *
+     * Ranging notifications arrive on the UWB stack's own RTOS thread and reach
+     * findBySessionHandle(), while addSession()/deleteSessionByDevice()/find()
+     * run on the BLE/loop thread and delete and shift the array.
+     *
+     * Created in begin() rather than in the constructor, which runs during
+     * static initialisation before the RTOS scheduler starts. While null, lock
+     * and unlock are no-ops.
+     *
+     * Do not hold this across handleStopSession() or handleTLV(); both perform
+     * UCI operations and would stall the ranging thread.
+     */
+    rtos::Mutex *sessionMutex;
+    bool lockSessions();    ///< bounded wait (loop-thread callers)
+    bool tryLockSessions(); ///< non-blocking (UWB HAL thread: findBySessionHandle)
+    void unlockSessions();
+
+    /// Bounded wait, so the ranging thread is never held up.
+    static const uint32_t kSessionLockTimeoutMs = 50;
+
+    static const unsigned long kReconnectSettleMs = 1500;
 
     void restartAdvertising();
+    void pauseAdvertisingForCleanup(unsigned long settleMs);
+    void resumeAdvertisingIfReady();
+    void notifySessionStarted(BLEDevice dev);
     bool notifyTx(BLEDevice peer, const uint8_t *data, int length);
 };
 

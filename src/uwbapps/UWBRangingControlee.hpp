@@ -21,22 +21,17 @@ public:
 		rangingParams.rangingRoundUsage(uwb::RangingMethod::DS_TWR);
 		rangingParams.scheduledMode(uwb::ScheduledMode::TIME_SCHEDULED);
 		rangingParams.deviceMacAddr(srcAddr);
-		
-		
-		appParams.noOfControlees(1);
-	    appParams.destinationMacAddr(dstAddr);
-	        
+		rangingParams.destinationMacAddr(dstAddr);
+		rangingParams.noOfControlees(1);
 		appParams.frameConfig(uwb::RfFrameConfig::SP3);
-
 		appParams.slotPerRR(25);
-		
 		appParams.rangingDuration(200);
 		appParams.stsConfig(uwb::StsConfig::StaticSts);
 		//appParams.powerId(20);
-		//appParams.maxRetries(0);
+		appParams.maxRetries(0);
 		appParams.sfdId(2);
 		appParams.preambleCodeIndex(10);	
-		
+		appParams.stsSegments(1);
    
 	}
 	

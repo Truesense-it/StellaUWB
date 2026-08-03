@@ -1,5 +1,22 @@
 #include "StellaUWB.h"
 
+/**
+ * Two-Way Ranging - one Controller to many Controlees (multicast)
+ *
+ * Sets up the Arduino Stella as a multicast Controller that ranges with up to
+ * four Controlees in a single session, and prints one distance per responding
+ * peer.
+ *
+ * Hardware: 2 to 5 boards.
+ *   This board : UWB_OneToMany, own MAC 0x1111
+ *   Each peer  : UWB_MulticastResponder, MAC 0x2222, 0x3333, 0x4444 or 0x5555
+ *
+ * Peers are addressed by the destination list below. Each responder needs a
+ * unique devAddr matching one entry in that list; the stock
+ * UWB_MulticastResponder sketch uses 0x2222, so edit it for additional boards.
+ * Fewer peers than listed is fine - absent addresses simply do not report.
+ */
+
 // Handler for ranging notifications 
 void rangingHandler(UWBRangingData &rangingData) {
 	Serial.print("GOT RANGING DATA - Type: ");

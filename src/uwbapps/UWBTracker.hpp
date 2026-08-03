@@ -21,8 +21,7 @@ public:
 		rangingParams.deviceMacAddr(srcAddr);
 		rangingParams.destinationMacAddr(dstAddr);
 		rangingParams.rangingRoundUsage(uwb::RangingMethod::DS_TWR);
-
-
+		rangingParams.scheduledMode(uwb::ScheduledMode::TIME_SCHEDULED);
 		appParams.frameConfig(uwb::RfFrameConfig::SP3);
 		appParams.slotPerRR(25);
 		appParams.rangingDuration(200);

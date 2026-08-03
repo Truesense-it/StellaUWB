@@ -33,7 +33,6 @@ public:
 		rangingParams.deviceMacAddr(srcAddr);
 		rangingParams.noOfControlees(dstAddr.size());
 		rangingParams.destinationMacAddr(dstAddr);
-
 		appParams.noOfControlees(dstAddr.size());
 		appParams.destinationMacAddr(dstAddr);
 		appParams.frameConfig(uwb::RfFrameConfig::SP3);

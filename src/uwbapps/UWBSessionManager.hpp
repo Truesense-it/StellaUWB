@@ -73,7 +73,7 @@ public:
     uwb::Status stopSessions();
 
     /**
-     * @brief utility method implemented in the NerabySessionManager
+     * @brief utility method implemented in the NearbySessionManager
      * 
      * @param dev 
      * @return NearbySession& 
